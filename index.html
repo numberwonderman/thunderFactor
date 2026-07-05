@@ -3,12 +3,23 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>THUNDER_FACTOR // TERMINAL</title>
+    <title>⚡ THUNDER_FACTOR // COMPETITIVE ⚡</title>
     <script src="https://unpkg.com/react@18/umd/react.development.js" crossorigin></script>
     <script src="https://unpkg.com/react-dom@18/umd/react-dom.development.js" crossorigin></script>
     <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
     <style>
         body { margin: 0; padding: 0; background-color: #001100; }
+        /* Visually hidden but accessible to screen readers */
+        .sr-only {
+            position: absolute;
+            width: 1px;
+            height: 1px;
+            padding: 0;
+            margin: -1px;
+            overflow: hidden;
+            clip: rect(0, 0, 0, 0);
+            border: 0;
+        }
     </style>
 </head>
 <body>
@@ -16,7 +27,16 @@
     <div id="root"></div>
 
     <script type="text/babel">
-        const { useState, useEffect } = React;
+        const { useState, useEffect, useRef } = React;
+
+        // --- SEED-BASED RANDOM SYSTEM (LCG) ---
+        function createSeededRandom(seed) {
+            let currentSeed = seed;
+            return function() {
+                currentSeed = (currentSeed * 1664525 + 1013904223) % 4294967296;
+                return currentSeed / 4294967296;
+            };
+        }
 
         const styles = {
             container: {
@@ -100,6 +120,19 @@
                 textShadow: '0 0 5px #33ff33',
                 boxShadow: '0 0 5px #33ff33',
             },
+            startScreenButton: {
+                backgroundColor: '#002200',
+                color: '#33ff33',
+                border: '3px solid #33ff33',
+                padding: '20px 40px',
+                fontSize: '1.5rem',
+                fontWeight: 'bold',
+                fontFamily: '"Courier New", Courier, monospace',
+                cursor: 'pointer',
+                textShadow: '0 0 5px #33ff33',
+                boxShadow: '0 0 15px #33ff33',
+                borderRadius: '4px',
+            },
             shareBox: {
                 marginTop: '20px',
                 padding: '15px',
@@ -113,25 +146,133 @@
         };
 
         function ThunderFactor() {
+            const [booted, setBooted] = useState(false);
             const [grid, setGrid] = useState([]);
             const [targetFactor, setTargetFactor] = useState(7);
             const [score, setScore] = useState(0);
             const [selectedIndices, setSelectedIndices] = useState([]);
             const [maxChain, setMaxChain] = useState(0);
+            const [movesLeft, setMovesLeft] = useState(15);
+            const [gameSeed, setGameSeed] = useState(0);
+            const [focusedIndex, setFocusedIndex] = useState(0); // For 2D keyboard navigation
+            const [announcement, setAnnouncement] = useState(""); // Accessible screen reader status
 
-            const generateGrid = () => {
-                const initialGrid = Array.from({ length: 25 }, () => Math.floor(Math.random() * 90) + 10);
+            const rngRef = useRef(null);
+            const tileRefs = useRef([]);
+
+            const initializeGameInstance = () => {
+                const today = new Date();
+                const calculatedSeed = (today.getFullYear() * 10000) + ((today.getMonth() + 1) * 100) + today.getDate();
+                setGameSeed(calculatedSeed);
+
+                rngRef.current = createSeededRandom(calculatedSeed);
+
+                const initialGrid = Array.from({ length: 25 }, () => Math.floor(rngRef.current() * 90) + 10);
+                const factors = [3, 4, 6, 7, 8, 9];
+                const selectedFactor = factors[Math.floor(rngRef.current() * factors.length)];
+
                 setGrid(initialGrid);
+                setTargetFactor(selectedFactor);
                 setSelectedIndices([]);
                 setScore(0);
                 setMaxChain(0);
-                const factors = [3, 4, 6, 7, 8, 9];
-                setTargetFactor(factors[Math.floor(Math.random() * factors.length)]);
+                setMovesLeft(15);
+                setFocusedIndex(0);
+                setAnnouncement(`Terminal initialized. Daily Target Factor is ${selectedFactor}. Grid generated.`);
             };
 
             useEffect(() => {
-                generateGrid();
+                initializeGameInstance();
             }, []);
+
+            // --- ACCESSIBILITY FIX: GLOBAL KEYBOARD TRAVERSAL & ENTER LISTENER ---
+            useEffect(() => {
+                const handleKeyDown = (event) => {
+                    if (event.key === 'Enter') {
+                        if (selectedIndices.length > 0 && movesLeft > 0) {
+                            event.preventDefault();
+                            processSlice();
+                        }
+                        return;
+                    }
+
+                    if (!booted || movesLeft === 0) return;
+
+                    let targetIndex = focusedIndex;
+                    const currentRow = Math.floor(focusedIndex / 5);
+                    const currentCol = focusedIndex % 5;
+
+                    switch (event.key) {
+                        case 'ArrowUp':
+                            if (currentRow > 0) targetIndex = focusedIndex - 5;
+                            event.preventDefault();
+                            break;
+                        case 'ArrowDown':
+                            if (currentRow < 4) targetIndex = focusedIndex + 5;
+                            event.preventDefault();
+                            break;
+                        case 'ArrowLeft':
+                            if (currentCol > 0) targetIndex = focusedIndex - 1;
+                            event.preventDefault();
+                            break;
+                        case 'ArrowRight':
+                            if (currentCol < 4) targetIndex = focusedIndex + 1;
+                            event.preventDefault();
+                            break;
+                        default:
+                            return; // Ignore unrelated keys
+                    }
+
+                    if (targetIndex !== focusedIndex) {
+                        setFocusedIndex(targetIndex);
+                        if (tileRefs.current[targetIndex]) {
+                            tileRefs.current[targetIndex].focus();
+                        }
+                    }
+                };
+
+                window.addEventListener('keydown', handleKeyDown);
+                return () => window.removeEventListener('keydown', handleKeyDown);
+            }, [focusedIndex, selectedIndices, movesLeft, booted]);
+
+            const playThunderSFX = () => {
+                const AudioContext = window.AudioContext || window.webkitAudioContext;
+                if (!AudioContext) return;
+                const ctx = new AudioContext();
+
+                const duration = 3.0; 
+                const sampleRate = ctx.sampleRate;
+                const bufferSize = sampleRate * duration;
+                const buffer = ctx.createBuffer(1, bufferSize, sampleRate);
+                const data = buffer.getChannelData(0);
+
+                for (let i = 0; i < bufferSize; i++) {
+                    data[i] = Math.random() * 2 - 1;
+                }
+
+                const noise = ctx.createBufferSource();
+                noise.buffer = buffer;
+
+                const filter = ctx.createBiquadFilter();
+                filter.type = 'lowpass';
+                filter.frequency.setValueAtTime(160, ctx.currentTime);
+                filter.frequency.exponentialRampToValueAtTime(10, ctx.currentTime + duration);
+
+                const gain = ctx.createGain();
+                gain.gain.setValueAtTime(0.6, ctx.currentTime);
+                gain.gain.exponentialRampToValueAtTime(0.01, ctx.currentTime + duration);
+
+                noise.connect(filter);
+                filter.connect(gain);
+                gain.connect(ctx.destination);
+
+                noise.start();
+            };
+
+            const handleBootSystem = () => {
+                playThunderSFX();
+                setBooted(true);
+            };
 
             const getRow = (index) => Math.floor(index / 5);
             const getCol = (index) => index % 5;
@@ -145,11 +286,15 @@
             };
 
             const handleTileClick = (index) => {
+                if (movesLeft <= 0) return;
                 if (selectedIndices.includes(index)) return;
+                
                 const value = grid[index];
 
                 if (value % targetFactor !== 0) {
-                    alert(`SYSTEM ERROR: ${value} IS NOT DIVISIBLE BY ${targetFactor}! MATRIX RESET.`);
+                    const errMsg = `SYSTEM ERROR: ${value} is not divisible by ${targetFactor}! Chain reset.`;
+                    setAnnouncement(errMsg);
+                    alert(errMsg);
                     setSelectedIndices([]);
                     return;
                 }
@@ -157,69 +302,160 @@
                 if (selectedIndices.length > 0) {
                     const lastSelectedIndex = selectedIndices[selectedIndices.length - 1];
                     if (!isAdjacent(lastSelectedIndex, index)) {
-                        alert("VECTOR DISCONNECTED: SELECTED CHORD MUST BE ADJACENT.");
+                        const disconnectedMsg = "VECTOR DISCONNECTED: Selected number must be adjacent.";
+                        setAnnouncement(disconnectedMsg);
+                        alert(disconnectedMsg);
                         setSelectedIndices([]);
                         return;
                     }
                 }
+                
                 setSelectedIndices([...selectedIndices, index]);
+                setAnnouncement(`Selected ${value} at row ${getRow(index) + 1}, column ${getCol(index) + 1}. Current chain length x${selectedIndices.length + 1}.`);
             };
 
             const processSlice = () => {
-                if (selectedIndices.length === 0) return;
+                if (selectedIndices.length === 0 || movesLeft <= 0) return;
+
                 const chainLength = selectedIndices.length;
-                setScore(prev => prev + (chainLength * 100 * chainLength));
+                const executionPoints = chainLength * 100 * chainLength;
+                setScore(prev => prev + executionPoints);
                 if (chainLength > maxChain) setMaxChain(chainLength);
 
                 const newGrid = [...grid];
                 selectedIndices.forEach(index => {
-                    newGrid[index] = Math.floor(Math.random() * 90) + 10;
+                    newGrid[index] = Math.floor(rngRef.current() * 90) + 10;
                 });
+
                 setGrid(newGrid);
                 setSelectedIndices([]);
+                const nextMoves = movesLeft - 1;
+                setMovesLeft(nextMoves);
+                
+                if (nextMoves === 0) {
+                    setAnnouncement(`Slice executed for ${executionPoints} points. Simulation complete! Final score: ${score + executionPoints}.`);
+                } else {
+                    setAnnouncement(`Slice executed. Earned ${executionPoints} points. ${nextMoves} moves remaining.`);
+                }
+            };
+
+            const getRedditShareText = () => {
+                return `⚡ THUNDER FACTOR DAILY SPRINT ⚡\n` +
+                       `📟 GRID MATRIX SEED: ${gameSeed}\n` +
+                       `🏆 FINAL SCORE: ${score}\n` +
+                       `⛓️ MAX CHAIN RECORD: x${maxChain}\n` +
+                       `🎯 CRACK TARGET: ${targetFactor}\n` +
+                       `🦾 PLAY EQUAL FIELDS ON THE REDDIT FEED`;
             };
 
             return (
-                <div style={styles.container}>
+                <div style={{ ...styles.container, justifyContent: booted ? 'flex-start' : 'center' }}>
                     <div style={styles.scanlines} />
-                    <header style={styles.header}>
-                        <h1>⚡ THUNDER_FACTOR // V1.1.0 ⚡</h1>
-                        <p>TRACE SEQUENTIAL SQUARES // ADJACENT LINKS ONLY</p>
-                    </header>
-
-                    <div style={styles.dashboard}>
-                        <div>TARGET: <span style={{fontSize: '1.5rem', color: '#fff'}}>{targetFactor}</span></div>
-                        <div>CHAIN: x{selectedIndices.length}</div>
-                        <div>SCORE: {score}</div>
+                    
+                    {/* ARIA Live Status Updates */}
+                    <div role="status" aria-live="polite" className="sr-only">
+                        {announcement}
                     </div>
+                    
+                    {!booted ? (
+                        <div style={{ textAlign: 'center' }}>
+                            <h1 style={{ fontSize: '2.5rem', marginBottom: '40px' }}>⚡ THUNDER_FACTOR // PROTOTYPE ⚡</h1>
+                            <button style={styles.startScreenButton} onClick={handleBootSystem} aria-label="Initialize terminal and play thunder audio intro">
+                                [ INITIALIZE TERMINAL ]
+                            </button>
+                            <p style={{ marginTop: '30px', color: '#11aa11', fontSize: '0.9rem' }}>
+                                WARNING: SECURE QUANTUM MAINFRAME CONNECTION REQUIRED
+                            </p>
+                        </div>
+                    ) : (
+                        <React.Fragment>
+                            <header style={styles.header}>
+                                <h1>⚡ THUNDER_FACTOR // V1.2.0 ⚡</h1>
+                                <p>DAILY SEED SYSTEM // 15 MOVE STRAT RECON</p>
+                            </header>
 
-                    <div style={styles.grid}>
-                        {grid.map((value, index) => {
-                            const isSelected = selectedIndices.includes(index);
-                            return (
-                                <div
-                                    key={index}
-                                    onClick={() => handleTileClick(index)}
-                                    style={{ ...styles.tile, ...(isSelected ? styles.selectedTile : {}) }}
+                            <div style={styles.dashboard} aria-label="Terminal Stats Dashboard">
+                                <div>TARGET: <span style={{fontSize: '1.5rem', color: '#fff'}}>{targetFactor}</span></div>
+                                <div>MOVES LEFT: <span style={{color: movesLeft <= 3 ? '#ff3333' : '#33ff33'}}>{movesLeft}</span></div>
+                                <div>SCORE: {score}</div>
+                            </div>
+
+                            <div style={styles.grid} role="grid" aria-label="5 by 5 Mathematical Grid Matrix">
+                                {grid.map((value, index) => {
+                                    const isSelected = selectedIndices.includes(index);
+                                    const isFocused = focusedIndex === index;
+                                    const rowNum = getRow(index) + 1;
+                                    const colNum = getCol(index) + 1;
+                                    return (
+                                        <div
+                                            key={index}
+                                            role="gridcell"
+                                            ref={(el) => (tileRefs.current[index] = el)}
+                                            tabIndex={movesLeft === 0 ? -1 : (isFocused ? 0 : -1)}
+                                            onFocus={() => setFocusedIndex(index)}
+                                            onClick={() => handleTileClick(index)}
+                                            onKeyDown={(e) => { if (e.key === ' ' || e.key === 'Enter') { e.preventDefault(); handleTileClick(index); } }}
+                                            aria-label={`Row ${rowNum} Column ${colNum}: Value ${value}${isSelected ? ', Selected' : ''}`}
+                                            aria-selected={isSelected}
+                                            style={{ 
+                                                ...styles.tile, 
+                                                ...(isSelected ? styles.selectedTile : {}),
+                                                outline: isFocused && movesLeft > 0 ? '3px solid #ffffff' : 'none',
+                                                opacity: movesLeft === 0 ? 0.6 : 1,
+                                                cursor: movesLeft === 0 ? 'default' : 'pointer'
+                                            }}
+                                        >
+                                            {value}
+                                        </div>
+                                    );
+                                })}
+                            </div>
+
+                            <div style={{ display: 'flex', gap: '20px' }}>
+                                <button 
+                                    style={styles.button} 
+                                    onClick={processSlice} 
+                                    disabled={selectedIndices.length === 0 || movesLeft === 0}
+                                    aria-label="Execute data slice from selected chain"
                                 >
-                                    {value}
-                                </div>
-                            );
-                        })}
-                    </div>
+                                    EXECUTE SLICE [_ENTER]
+                                </button>
+                                <button style={styles.button} onClick={initializeGameInstance} aria-label="Restart your daily game layout">
+                                    RESTART DAILY
+                                </button>
+                            </div>
 
-                    <div style={{ display: 'flex', gap: '20px' }}>
-                        <button style={styles.button} onClick={processSlice} disabled={selectedIndices.length === 0}>
-                            EXECUTE SLICE [_ENTER]
-                        </button>
-                        <button style={styles.button} onClick={generateGrid}>
-                            RESET BOARD
-                        </button>
-                    </div>
+                            {movesLeft === 0 && (
+                                <div style={styles.shareBox} role="dialog" aria-label="Simulation Complete Scoreboard">
+                                    <h2 style={{color: '#fff', margin: '0 0 10px 0'}}>⚡ SIMULATION COMPLETE ⚡</h2>
+                                    <h3>REDDIT LEADERBOARD LINK COMPLIANT</h3>
+                                    <textarea
+                                        readOnly
+                                        value={getRedditShareText()}
+                                        aria-label="Your shareable Reddit match stats scorecard"
+                                        style={{
+                                            width: '100%',
+                                            height: '110px',
+                                            backgroundColor: '#000500',
+                                            color: '#33ff33',
+                                            border: '1px solid #33ff33',
+                                            fontFamily: 'monospace',
+                                            padding: '5px',
+                                            resize: 'none',
+                                            boxSizing: 'border-box'
+                                        }}
+                                    />
+                                </div>
+                            )}
+                        </React.Fragment>
+                    )}
                 </div>
             );
         }
-const root = ReactDOM.createRoot(document.getElementById('root'));
+
+        const container = document.getElementById('root');
+        const root = ReactDOM.createRoot(container);
+        root.render(<ThunderFactor />);
     </script>
 </body>
 </html>
