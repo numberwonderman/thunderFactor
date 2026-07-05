@@ -1,0 +1,254 @@
+import React, { useState, useEffect } from 'react';
+
+// --- RETRO CRT STYLES ---
+const styles = {
+  container: {
+    backgroundColor: '#001100',
+    color: '#33ff33',
+    fontFamily: '"Courier New", Courier, monospace',
+    padding: '20px',
+    minHeight: '100vh',
+    display: 'flex',
+    flexDirection: 'column',
+    alignItems: 'center',
+    textShadow: '0 0 5px #33ff33, 0 0 10px #11aa11',
+    position: 'relative',
+    overflow: 'hidden',
+  },
+  scanlines: {
+    position: 'absolute',
+    top: 0, left: 0, width: '100%', height: '100%',
+    background: 'linear-gradient(rgba(18, 16, 16, 0) 50%, rgba(0, 0, 0, 0.25) 50%)',
+    backgroundSize: '100% 4px',
+    zIndex: 10,
+    pointerEvents: 'none',
+  },
+  header: {
+    textAlign: 'center',
+    borderBottom: '2px double #33ff33',
+    paddingBottom: '10px',
+    marginBottom: '20px',
+    width: '100%',
+    maxWidth: '500px',
+  },
+  dashboard: {
+    display: 'flex',
+    justifyContent: 'space-between',
+    width: '100%',
+    maxWidth: '500px',
+    marginBottom: '20px',
+    fontSize: '1.2rem',
+  },
+  grid: {
+    display: 'grid',
+    gridTemplateColumns: 'repeat(5, 1fr)',
+    gap: '10px',
+    width: '100%',
+    maxWidth: '400px',
+    backgroundColor: '#002200',
+    padding: '15px',
+    border: '3px solid #33ff33',
+    boxShadow: 'inset 0 0 15px #001100, 0 0 15px #33ff33',
+    borderRadius: '4px',
+  },
+  tile: {
+    aspectRatio: '1',
+    backgroundColor: '#001100',
+    border: '1px solid #33ff33',
+    display: 'flex',
+    justifyContent: 'center',
+    alignItems: 'center',
+    fontSize: '1.4rem',
+    fontWeight: 'bold',
+    cursor: 'pointer',
+    userSelect: 'none',
+    transition: 'all 0.1s ease',
+  },
+  selectedTile: {
+    backgroundColor: '#33ff33',
+    color: '#001100',
+    textShadow: 'none',
+    boxShadow: '0 0 10px #33ff33',
+  },
+  button: {
+    backgroundColor: 'transparent',
+    color: '#33ff33',
+    border: '2px solid #33ff33',
+    padding: '10px 20px',
+    fontSize: '1rem',
+    fontFamily: '"Courier New", Courier, monospace',
+    cursor: 'pointer',
+    marginTop: '20px',
+    textShadow: '0 0 5px #33ff33',
+    boxShadow: '0 0 5px #33ff33',
+  },
+  shareBox: {
+    marginTop: '20px',
+    padding: '15px',
+    border: '1px dashed #33ff33',
+    maxWidth: '400px',
+    textAlign: 'center',
+    backgroundColor: '#001800'
+  }
+};
+
+export default function FactorSlicer() {
+  const [grid, setGrid] = useState([]);
+  const [targetFactor, setTargetFactor] = useState(7);
+  const [score, setScore] = useState(0);
+  const [selectedIndices, setSelectedIndices] = useState([]);
+  const [maxChain, setMaxChain] = useState(0);
+
+  const generateGrid = () => {
+    const initialGrid = Array.from({ length: 25 }, () => Math.floor(Math.random() * 90) + 10);
+    setGrid(initialGrid);
+    setSelectedIndices([]);
+    setScore(0);
+    setMaxChain(0);
+    const factors = [3, 4, 6, 7, 8, 9];
+    setTargetFactor(factors[Math.floor(Math.random() * factors.length)]);
+  };
+
+  useEffect(() => {
+    generateGrid();
+  }, []);
+
+  // Helper functions to map a 1D array index (0-24) to 2D coordinates (row, col)
+  const getRow = (index) => Math.floor(index / 5);
+  const getCol = (index) => index % 5;
+
+  // core ADJACENCY LOGIC
+  const isAdjacent = (indexA, indexB) => {
+    const rowA = getRow(indexA);
+    const colA = getCol(indexA);
+    const rowB = getRow(indexB);
+    const colB = getCol(indexB);
+
+    const rowDiff = Math.abs(rowA - rowB);
+    const colDiff = Math.abs(colA - colB);
+
+    // Adjacent tiles are at most 1 row away and 1 column away
+    // (This allows horizontal, vertical, and diagonal moves)
+    return rowDiff <= 1 && colDiff <= 1;
+  };
+
+  const handleTileClick = (index) => {
+    // If the tile is already part of the chain, do nothing or break
+    if (selectedIndices.includes(index)) return;
+
+    const value = grid[index];
+
+    // 1. Math Check: Is it divisible?
+    if (value % targetFactor !== 0) {
+      alert(`SYSTEM ERROR: ${value} IS NOT DIVISIBLE BY ${targetFactor}! MATRIX RESET.`);
+      setSelectedIndices([]);
+      return;
+    }
+
+    // 2. Adjacency Check: If a chain exists, must touch the last item in sequence
+    if (selectedIndices.length > 0) {
+      const lastSelectedIndex = selectedIndices[selectedIndices.length - 1];
+      
+      if (!isAdjacent(lastSelectedIndex, index)) {
+        alert("VECTOR DISCONNECTED: SELECTED CHORD MUST BE ADJACENT TO PREVIOUS NODE.");
+        setSelectedIndices([]); // Clears current broken attempt
+        return;
+      }
+    }
+
+    // Success: Add tile to the chain buffer
+    setSelectedIndices([...selectedIndices, index]);
+  };
+
+  const processSlice = () => {
+    if (selectedIndices.length === 0) return;
+
+    const chainLength = selectedIndices.length;
+    const pointsGained = chainLength * 100 * chainLength; 
+    setScore(prev => prev + pointsGained);
+    
+    if (chainLength > maxChain) {
+      setMaxChain(chainLength);
+    }
+
+    const newGrid = [...grid];
+    selectedIndices.forEach(index => {
+      newGrid[index] = Math.floor(Math.random() * 90) + 10;
+    });
+
+    setGrid(newGrid);
+    setSelectedIndices([]);
+  };
+
+  const getRedditShareText = () => {
+    return `⚡ FACTORSLICER SPRINT ⚡\n` +
+           `🏆 MATRIX SCORE: ${score}\n` +
+           `⛓️ MAX CHAIN SECTOR: x${maxChain}\n` +
+           `🎯 CRACK TARGET: ${targetFactor}\n` +
+           `📟 ENGINE: MONOCHROME_VECTOR_V1`;
+  };
+
+  return (
+    <div style={styles.container}>
+      <div style={styles.scanlines} />
+
+      <header style={styles.header}>
+        <h1>FACTOR_SLICER // V1.1.0</h1>
+        <p>TRACE SEQUENTIAL SQUARES // ADJACENT LINKS ONLY</p>
+      </header>
+
+      <div style={styles.dashboard}>
+        <div>TARGET: <span style={{fontSize: '1.5rem', color: '#fff'}}>{targetFactor}</span></div>
+        <div>CHAIN: x{selectedIndices.length}</div>
+        <div>SCORE: {score}</div>
+      </div>
+
+      <div style={styles.grid}>
+        {grid.map((value, index) => {
+          const isSelected = selectedIndices.includes(index);
+          return (
+            <div
+              key={index}
+              onClick={() => handleTileClick(index)}
+              style={{
+                ...styles.tile,
+                ...(isSelected ? styles.selectedTile : {}),
+              }}
+            >
+              {value}
+            </div>
+          );
+        })}
+      </div>
+
+      <div style={{ display: 'flex', gap: '20px' }}>
+        <button style={styles.button} onClick={processSlice} disabled={selectedIndices.length === 0}>
+          EXECUTE SLICE [_ENTER]
+        </button>
+        <button style={styles.button} onClick={generateGrid}>
+          RESET BOARD
+        </button>
+      </div>
+
+      {score > 0 && (
+        <div style={styles.shareBox}>
+          <h3>REDDIT OUTPUT COMPLIANT</h3>
+          <textarea
+            readOnly
+            value={getRedditShareText()}
+            style={{
+              width: '100%',
+              height: '100px',
+              backgroundColor: '#000500',
+              color: '#33ff33',
+              border: '1px solid #33ff33',
+              fontFamily: 'monospace',
+              padding: '5px',
+              resize: 'none'
+            }}
+          />
+        </div>
+      )}
+    </div>
+  );
+}
